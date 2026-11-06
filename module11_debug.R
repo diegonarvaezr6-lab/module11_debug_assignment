@@ -1,66 +1,81 @@
 
-R version 4.5.1 (2025-06-13) -- "Great Square Root"
-Copyright (C) 2025 The R Foundation for Statistical Computing
-Platform: aarch64-apple-darwin20
+# Assignment 11 - Debugging in R
+# Module 11: Logical Operators and Defensive Programming
 
-R is free software and comes with ABSOLUTELY NO WARRANTY.
-You are welcome to redistribute it under certain conditions.
-Type 'license()' or 'licence()' for distribution details.
+# Tukey outlier helper function
+tukey.outlier <- function(x) {
+  q1 <- quantile(x, 0.25)
+  q3 <- quantile(x, 0.75)
+  iqr <- IQR(x)
 
-  Natural language support but running in an English locale
+  x < (q1 - 1.5 * iqr) | x > (q3 + 1.5 * iqr)
+}
 
-R is a collaborative project with many contributors.
-Type 'contributors()' for more information and
-'citation()' on how to cite R or R packages in publications.
+# Step 1: Original buggy function
+tukey_multiple <- function(x) {
+  outliers <- array(TRUE, dim = dim(x))
 
-Type 'demo()' for some demos, 'help()' for on-line help, or
-'help.start()' for an HTML browser interface to help.
-Type 'q()' to quit R.
+  for (j in 1:ncol(x)) {
+    outliers[, j] <- outliers[, j] && tukey.outlier(x[, j])
+  }
 
-[R.app GUI 1.82 (8536) aarch64-apple-darwin20]
+  outlier.vec <- vector("logical", length = nrow(x))
 
-[Workspace restored from /Users/diegonarvaez/.RData]
-[History restored from /Users/diegonarvaez/.Rapp.history]
+  for (i in 1:nrow(x)) {
+    outlier.vec[i] <- all(outliers[i, ])
+  }
 
-> tukey.outlier <- function(x) {
-+   stopifnot(is.numeric(x))
-+   q1  <- quantile(x, 0.25, na.rm = TRUE)
-+   q3  <- quantile(x, 0.75, na.rm = TRUE)
-+   iqr <- q3 - q1
-+   (x < q1 - 1.5 * iqr) | (x > q3 + 1.5 * iqr)
-+ }
-> 
-> tukey_multiple <- function(x) {
-+   outliers <- array(TRUE, dim = dim(x))
-+   for (j in 1:ncol(x)) {
-+     outliers[, j] <- outliers[, j] && tukey.outlier(x[, j])  # <-- BUG: usa &&
-+   }
-+   outlier.vec <- vector("logical", length = nrow(x))
-+   for (i in 1:nrow(x)) {
-+     outlier.vec[i] <- all(outliers[i, ])
-+   }
-+   return(outlier.vec)
-+ }
-> 
-> set.seed(123)
-> test_mat <- matrix(rnorm(50), nrow = 10)
-> tukey_multiple(test_mat)
-Error in outliers[, j] && tukey.outlier(x[, j]) : 
-  'length = 10' in coercion to 'logical(1)'
-> 
-> corrected_tukey <- function(x) {
-+   outliers <- array(TRUE, dim = dim(x))
-+   for (j in seq_len(ncol(x))) {
-+     outliers[, j] <- outliers[, j] & tukey.outlier(x[, j])  # FIX: usa &
-+   }
-+   outlier.vec <- logical(nrow(x))
-+   for (i in seq_len(nrow(x))) {
-+     outlier.vec[i] <- all(outliers[i, ])
-+   }
-+   outlier.vec
-+ }
-> 
-> corrected_tukey(test_mat)
- [1] FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE FALSE
-> 
-> 
+  return(outlier.vec)
+}
+
+# Step 2: Reproduce the bug
+set.seed(123)
+test_mat <- matrix(rnorm(50), nrow = 10)
+
+cat("Original buggy function:\n")
+try(tukey_multiple(test_mat))
+
+# Step 3: Corrected function
+corrected_tukey <- function(x) {
+
+  # Defensive checks
+  if (!is.matrix(x) || !is.numeric(x)) {
+    stop("Input must be a numeric matrix.")
+  }
+
+  if (nrow(x) == 0 || ncol(x) == 0) {
+    stop("Matrix must not be empty.")
+  }
+
+  if (anyNA(x) || any(!is.finite(x))) {
+    stop("Matrix must contain only finite numeric values.")
+  }
+
+  outliers <- array(TRUE, dim = dim(x))
+
+  for (j in seq_len(ncol(x))) {
+    outliers[, j] <- outliers[, j] & tukey.outlier(x[, j])
+  }
+
+  outlier.vec <- logical(nrow(x))
+
+  for (i in seq_len(nrow(x))) {
+    outlier.vec[i] <- all(outliers[i, ])
+  }
+
+  outlier.vec
+}
+
+# Step 4: Test corrected function
+cat("\nCorrected function output:\n")
+result <- corrected_tukey(test_mat)
+print(result)
+
+cat("\nOutput length:", length(result), "\n")
+cat("Is logical:", is.logical(result), "\n")
+
+# Step 5: Test defensive programming
+cat("\nTesting invalid input:\n")
+try(corrected_tukey("invalid input"))
+
+cat("\nAssignment 11 completed.\n")
